@@ -1,0 +1,11 @@
+# What I did today
+30 min - Issue is resolved related to AWS account.
+30 min - Created EC2 server and installed Git on EC2.
+2 hrs - Practiced Linux commands.
+2 hrs - Went through the last May month linux youtube video as suggested in todays class.
+
+## Tomorrow's Task
+Task 1 - Attend the Day 3 lecture and evening class.
+Task 2 - Practice the commands tought today in class.
+Task 3 - Prepare own notes for which commands I have practiced.
+Task 4 - Revise all the commands again for both Linux and Git.
