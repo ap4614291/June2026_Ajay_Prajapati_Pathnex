@@ -1,0 +1,10 @@
+# What I did today
+2 hrs - Went through the last May month linux youtube video as suggested in todays class.
+2 hrs - Practiced linux commands : ls, cd, mkdir, rmdir, rm, cp, mv, chmod, chown, chgrp, touch, echo, cat
+2 hrs - Watched today session on youtube
+
+## Tomorrow's Task
+Task 1 - Attend the Day 4 lecture and evening class.
+Task 2 - Practice the commands tought today in class.
+Task 3 - Prepare own notes for which commands I have practiced.
+Task 4 - Revise all the commands again for both Linux and Git.
