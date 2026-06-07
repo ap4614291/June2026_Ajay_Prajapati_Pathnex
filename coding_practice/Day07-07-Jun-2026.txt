@@ -1,0 +1,130 @@
+
+
+## Ansible - Install Nginx
+
+---
+- name: Install Nginx
+	hosts: all
+	become: yes
+
+	tasks:
+	- name: Install Nginx
+		package:
+			name: nginx
+			state: present
+
+  - name: Enable and Start Nginx
+		service:
+			name: nginx
+			state: started
+			enabled: true
+
+
+## Terraform - EC2 with User Data
+
+provider "aws" {
+	region = "us-east-1"
+}
+
+resource "aws_instance" "PathnexEC2"{
+
+	ami 					= "ami-12345"
+	instance_type = "c6a.12xlarge"
+	user_data = << EOF
+		#!/bin/bash
+		yum install httpd -y
+		systemctl enable httpd
+		systemctl start httpd
+	EOF
+	
+	tags = {
+		Name = "PathnexEC2"
+	}
+}
+
+## Kubernetes - Deployment 2 Replicas
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+	name: test-dep
+	namespace: test-ns
+spec:
+	replicas: 2
+	selector:
+		matchLabels:
+			app: test
+	template:
+		metadata:
+			labels:
+				app: test
+		spec:
+			containers:
+			- name: test-container
+				image: nginx
+				ports:
+				- containerPort: 80
+				resources:
+					requests:
+						cpu: "100m"
+						memory: "200Mi"
+					limits:
+						cpu: "500m"
+						memory: "1Gi"
+
+
+## Shell Script - Print Date + uptime
+
+#!/bin/bash
+
+echo "Todays date: $(date)"
+echo "Server uptime: $(uptime)"
+		
+
+## Jenkins Pipeline - Parameterized
+
+pipeline{
+	
+	agent any
+	
+	parameters{
+		string(name: 'ENVIRONMENT', defaultValue: 'DEV', description: 'Deployemnt Env')
+	}
+
+	environment {
+		INSTITUE_NAME = "Pathnex" 
+	}
+
+	stages{
+		stage('Checkout'){
+			steps{
+				git branch: 'main', url: 'https://github.com/Pathnex/sample-java-app.git'
+			}
+		}
+		stage('Deploy'){
+			steps{
+				sh 'echo "Deploying to $ENVIRONMENT by $INSTITUE_NAME"'
+			}
+		}
+	}
+}
+
+
+## Gitlab CI - Parameterized via Variables
+
+stages:
+	- deploy
+
+variables:
+		INSTITUE_NAME: "Pathnex"
+		ENVIRONMENT: "Dev"
+
+deploy:
+	stage: deploy
+	image: alpine:latest
+	script:
+	- git clone https://github.com/Pathnex/sample-java-app.git
+	- cd sample-java-app
+	- echo "Deploying to $ENVIRONMENT by $INSTITUE_NAME"
+
+
