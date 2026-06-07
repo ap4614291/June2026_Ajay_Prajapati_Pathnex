@@ -1,9 +1,0 @@
-# What I did today
-2 hrs - Watched today Day 1 session of AWS on youtube
-3 hrs - Practiced Linux and Git commands. 
-2 hrs - I learned and practiced IAM users, user groups, policies, roles.  
-
-## Tomorrow's Task
-Task 1 - Attend the Day 7 lecture and evening class.
-Task 2 - Practice the commands tought today in class.
-Task 3 - Revise all the commands again for both Linux and Git.
