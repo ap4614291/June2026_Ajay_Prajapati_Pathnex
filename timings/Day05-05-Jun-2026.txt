@@ -1,0 +1,9 @@
+# What I did today
+2 hrs - Went through the last May month Git youtube video as suggested in todays class.
+2 hrs - Practiced Github and Git commands : init, status, add, commit, push, pull, fetch, branch, checkout, switch, clone. 
+2 hrs - Watched today session on youtube
+
+## Tomorrow's Task
+Task 1 - Attend the Day 6 lecture and evening class.
+Task 2 - Practice the commands tought today in class.
+Task 4 - Revise all the commands again for both Linux and Git.

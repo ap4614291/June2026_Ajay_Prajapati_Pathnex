@@ -1,0 +1,9 @@
+# What I did today
+2 hrs - Went through the last May month linux youtube video as suggested in todays class.
+3 hrs - Practiced linux commands : top, htop, lscpu, free, df, du, ps, grep, awk, find, sed, less, more, head, tail, ifconfig, ip addr, ip route, traceroute, nslookup, netstat/ss -tulnp
+2 hrs - Watched today session on youtube
+
+## Tomorrow's Task
+Task 1 - Attend the Day 5 lecture and evening class.
+Task 2 - Practice the commands tought today in class.
+Task 3 - Revise all the Linux commands.
