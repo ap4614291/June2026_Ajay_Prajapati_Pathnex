@@ -96,3 +96,5 @@ test:
 	- cd sample-java-app
 	- mvn test
 
+
+

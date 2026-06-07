@@ -7,3 +7,5 @@
 Task 1 - Attend the Day 7 lecture and evening class.
 Task 2 - Practice the commands tought today in class.
 Task 3 - Revise all the commands again for both Linux and Git.
+
+
