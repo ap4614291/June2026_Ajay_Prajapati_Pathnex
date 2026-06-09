@@ -1,0 +1,10 @@
+# What I did today
+2 hrs - Went through the AWS services Session Manager, Route 53, CloudTrail, CloudWatch, Auto Scaling, Lambda, shield, WAF (Web Applciation Firewall), GuardDuty, Inspector.
+3 hrs - Practiced Linux and Git commands. 
+1 hrs - Joined troubleshooting session   
+
+## Tomorrow's Task
+Task 1 - Attend the Day 9 lecture and evening class.
+Task 2 - Practice the commands tought today in class.
+Task 3 - Revise all the commands again for both Linux and Git.
+
