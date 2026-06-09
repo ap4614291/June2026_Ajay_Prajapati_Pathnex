@@ -1,0 +1,9 @@
+# What I did today
+2 hrs - Went through the AWS services like AWS KMS, System Manager, RDS, Aurora, DynamoDB, DMS, Snowball, Elastic Beanstalk, EFS, Redshift, Glue, EMR, CodePipeline, CodeBuild, CodeDeploy, Batch, cloudfront, Transit Gateway
+3 hrs - Practiced Linux and Git commands. 
+2 hrs - Went through the today session.
+
+## Tomorrow's Task
+Task 1 - Attend the Day 10 lecture and evening class.
+Task 2 - Practice the commands tought today in class.
+Task 3 - Revise all the commands again for both Linux and Git.
