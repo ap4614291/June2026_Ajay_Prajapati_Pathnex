@@ -1,0 +1,242 @@
+## Terraform - Create EC2 (VPC -> Internet Gateway -> Route Table -> Subnet -> Association -> Security Group -> EC2)
+
+provider "aws" {
+  region = "us-east-1"
+}
+
+resource "aws_vpc" "hcl_vpc"{
+
+  cidr_block = "10.0.0.0/16"
+  enable_dns_support   = true
+  enable_dns_hostnames = true
+
+  instance_tenancy = "default"
+
+  tags = {
+    Name = "hcl_vpc"
+  }
+}
+
+resource "aws_internet_gateway" "hcl_vpc_ig"{
+
+  vpc_id = aws_vpc.hcl_vpc.id
+
+  tags = {
+    Name = "hcl_vpc_ig"
+  }
+}
+
+resource "aws_route_table" "hcl_vpc_rt" {
+
+  vpc_id = aws_vpc.hcl_vpc.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.hcl_vpc_ig.id
+  }
+
+  tags = {
+    Name = "hcl_vpc_rt"
+  }
+}
+
+resource "aws_subnet" "hcl_vpc_sb_1" {
+
+  vpc_id = aws_vpc.hcl_vpc.id
+  cidr_block = "10.0.1.0/24"
+  availability_zone = "us-east-1a"
+  map_public_ip_on_launch = true
+  tags = {
+    Name = "hcl_vpc_sb_1"
+  }
+}
+
+resource "aws_route_table_association" "hcl_vpc_rt_sb1" {
+  subnet_id = aws_subnet.hcl_vpc_sb_1.id
+  route_table_id = aws_route_table.hcl_vpc_rt.id
+}
+
+resource "aws_security_group" "hcl_ec2_sg" {
+
+  name = "hcl_ec2_sg"
+  vpc_id = aws_vpc.hcl_vpc.id
+
+  ingress{
+    from_port = 22
+    to_port = 22
+    protocol = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress{
+    from_port = 0
+    to_port = 0
+    protocol = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_instance" "hcl_ec2" {
+
+  ami = "ami-0b6d9d3d33ba97d99"
+  instance_type = "c5n.4xlarge"
+  subnet_id = aws_subnet.hcl_vpc_sb_1.id
+  
+  vpc_security_group_ids = [aws_security_group.hcl_ec2_sg.id]
+  key_name = "hcl-ec2"
+
+  tags = {
+    Name = "hcl_ec2"
+  }
+}
+
+
+### Ansible - Install Ngnix & Deploy HTML File
+
+ansible.html
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Welcome</title>
+</head>
+<body>
+    <h1>Nginx deployed via Ansible 🚀</h1>
+</body>
+</html>
+
+inventory.ini
+[web]
+192.176.21.34 ansible_user=web ansible_ssh_private_key_file=~/.ssh/id_rsa
+
+web.yaml
+---
+- name: Install Nginx & Deploy HTMl File
+  hosts: web
+  become: true
+
+  tasks:
+    - name: Install Nginx
+      package:
+        name: nginx
+        state: present
+
+    - name: Start & Enable Nginx
+      service:
+        name: nginx 
+        state: started
+        enabled: yes
+    
+    - name: Delpoy ansible.html
+      copy: 
+        src: /home/web/ansible.html
+        dest: /var/www/html/ansible.html
+        owner: "hcl"
+        group: "hcl"
+        mode: '0644'
+      notify: Restart Nginx
+  
+  handlers:
+    - name: Restart Nginx
+      service:
+        name: nginx
+        state: restarted    
+
+
+### Kubernetes - Create Deployment + Service
+
+Deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hcl-app
+  namespace: hcl-ns
+spec:
+  replicas: 2
+  selectors:
+    matchLables:
+      name: hcl-pod
+  template:
+    metadata:
+      name: hcl-pod
+    spec:
+      containers:
+      - name: hcl-container
+        image: ngnix:latest
+        ports:
+        - containerPorts: 80
+
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "250Mi"
+          limits:
+            cpu: "200m"
+            memory: "500Mi"
+
+
+service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: hcl-nodeport
+  namespace: hcl-ns
+spec:
+  type: NodePort
+  selector:
+    name: hcl-pod
+  ports:
+  - port: 80
+    targetPort: 80
+    nodePort: 3000
+
+
+### Shell - Print CPU, Memory & Disk
+
+#!/bin/bash
+
+printf "\nCPU Load: \n" 
+uptime 
+printf "\nMemory: \n" 
+free -h
+printf "\nDisk: \n"
+df -h
+
+
+### Jenkins Pipeline — Scheduled Build
+You will learn how to schedule a Jenkins pipeline using cron.
+
+pipeline {
+    agent any
+    environment {
+        INSTITUTE_NAME = "hcl"
+    }
+    triggers {
+        cron('H 2 * * *') // every day at 2 AM
+    }
+    stages {
+        stage('Checkout') {
+            steps {
+                git url: 'https://github.com/Pathnex/sample-java-app.git'
+            }
+        }
+        stage('Build') {
+            steps {
+                sh 'mvn clean package'
+            }
+        }
+    }
+}
+
+## GitLab CI — Scheduled Pipeline
+You will learn how to schedule GitLab CI pipelines via cron.
+
+stages:
+  - build
+
+build:
+  stage: build
+  image: maven:3.8.1-jdk-17
+  script:
+    - git clone https://github.com/Pathnex/sample-java-app.git
+    - cd sample-java-app
+    - mvn clean package
