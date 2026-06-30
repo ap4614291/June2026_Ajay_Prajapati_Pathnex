@@ -1,0 +1,118 @@
+### Ansible - Install Java & Set JAVA_HOME
+
+---
+- name: Install Java & Set JAVA_HOME
+  hosts: test
+  become: true
+
+  tasks:
+    - name: Install Java
+      package:
+        name: java-21-openjdk
+        state: present
+    
+    - name: Set JAVA_HOME
+      lineinfile:
+        path: /etc/profile
+        line: 'export JAVA_HOME=/usr/lib/jvm/java21-openjdk'
+
+
+### Terraform - Create S3 Bucket
+
+provider "aws" {
+  region = "us-east-2"
+}
+
+resource "aws_s3_bucket" "hcl_s3_bucket" {
+
+  bucket = "hcl_s3_bucket_june_2026"
+
+  tags = {
+    Name = "hcl_s3_bucket"
+  }
+}
+
+
+### Kubernetes - CronJob
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: hcl_batch_job
+spec:
+  schedule: "*/5 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: job
+              image: busybox
+              command: ["sh", "-c", "echo ConJob is running"]
+          restartPolicy: onFailure
+
+### Shell Script - Read file Line-By-Line
+
+#!/bin/bash
+
+FILE="/etc/passwd"
+
+while read line; do
+  echo "Line: $line"
+done < $FILE
+
+
+### Jenkins Pipeline - Slack Notification
+
+pipeline {
+
+  agent {
+    label 'worker-1'
+  }
+
+  environment{
+    INSTITUTE_NAME = "HCL"
+    SLACK_CHANNEL = "#devops"
+  }
+
+  stages {
+    stage('Checkout'){
+        steps {
+            git branch: "dev" , url: 'https://github.com/Pathnex/sample-java-app.git' 
+        }
+      }
+    stage('Build'){
+      steps {
+        sh 'mvn clean package'
+      }
+    }
+  }
+
+  post {
+    success {
+      slackSend(channel: "$SLACK_CHANNEL", message: "SUCCESS: $INSTITUTE_NAME Build #${env.BUILD_NUMBER}")
+    }
+    failure{
+      slackSend(channel: "$SLACK_CHANNEL", message: "FAILURE: $INSTITUTE_NAME Build #${env.BUILD_NUMBER}")
+    }
+  }
+}
+
+
+### GitLab CI - Slack Notification
+
+stages:
+  - build
+
+variables:
+  INSTITUTE_NAME: "HCL"
+  SLACK_WEBHOOK: "https://hooks.slack.com/services/XXXXX/YYYYY/ZZZZZ"
+
+build:
+  stage: build
+  image: maven:3.8.1-jdk-21
+  script:
+    - git clone "https://github.com/Pathnex/sample-java-app.git"
+    - cd sample-java-app
+    - mvn clean package
+    - curl -X POST -H 'Content-type: application/json' --data '{"text":"Build success for HCL"}' $SLACK_WEBHOOK
