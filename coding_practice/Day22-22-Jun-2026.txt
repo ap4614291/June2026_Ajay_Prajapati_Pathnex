@@ -1,0 +1,136 @@
+### Anisble - User Handler on Config Change
+
+---
+- name: Configure Nginx for Pathnex
+  hosts: webservers
+  become: true
+
+  tasks:
+    - name: Copy Nginx Config
+      copy:
+        dest: /etc/nginx/nginx.conf
+        content: |
+          user nginx;
+          worker_processes auto;
+      notify: Restart Nginx
+  handlers:
+    - name: Restart Nginx
+      service:
+        name: nginx
+        state: restarted
+
+
+### Terraform - Security Group
+
+provider "aws" {
+  region = "us-east-1"
+}
+
+resource "aws_security_group" "hcl_sg" {
+
+  name = "hcl_sg"
+  vpc_id = aws_vpc.hcl_vpc.id
+
+  ingress{
+    from_port = 22
+    to_port = 22
+    protocol = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress{
+    from_port = 0
+    to_port = 0
+    protocol = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "hcl_sg"
+  }
+}
+
+
+### Kubernets - DeamonSet 
+
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: hcl_ds
+spec:
+  selector:
+    matchLabels:
+      app: ds
+  template:
+    metadata:
+      labels:
+        app: ds
+    spec:
+      containers:
+      - name: hcl_app_ds
+        image: busybox
+        command: ["sh", "-c", 'while true; do echo "Pathnex Node Monitor"; sleep 20; done']
+
+
+### shell script - monitor disk usage
+
+#!/bin/bash
+
+printf "%-20s %-10s %-5s\n" "Disk" "Usage" "Mount"
+df -hP | awk 'NR>1 {printf "%-20s %-10s %-5s\n", $1, $5, $6}'
+
+
+### Jenkins Pipeline — Trigger on Git Tag
+
+pipeline {
+  
+  agent {
+    label 'worker-1'
+  }
+
+  environment {
+    INSTITUTE_NAME = "Pathnex"
+    TEAM = "DevOps"
+    ENV = "prod"
+  }
+
+  triggers {
+    pollSCM('H/15 * * * *')
+  }
+
+  stages{
+    stage('Checkout'){
+      steps{
+        git branch: 'main',
+            url: 'https://github.com/Pathnex/sample-java-app.git'
+      }
+    stage('Build'){
+      when {
+        buildingTag()
+      }
+      steps{
+        sh 'echo "Building $INSTITUTE_NAME app for $TEAM in $ENV environment"'
+      }
+    }
+    }
+  }
+}
+
+### GitLab CI — Trigger on Tag
+
+stages:
+  - build
+
+variables:
+  INSTITUTE_NAME: "Pathnex"
+  TEAM: "Devops"
+  ENV: "prod"
+
+build:
+  stage: build
+  image: maven:3.8.1-jdk-21
+  script:
+    - echo "Building $INSTITUTE_NAME app for $TEAM in $ENV environment"
+  rules:
+    - if: $CI_COMMIT_TAG
+ 
