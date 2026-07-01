@@ -1,2 +1,0 @@
-This is a main branch.
-I will create different new branches for day wise.	
