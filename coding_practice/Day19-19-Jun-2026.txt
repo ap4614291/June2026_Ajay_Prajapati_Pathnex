@@ -1,0 +1,109 @@
+### Ansible — Deploy App Using Git
+
+---
+- name: Deploy app from Git for hcl
+  hosts: all
+  become: yes
+
+  tasks:
+    - name: Install git
+      yum:
+        name: git
+        state: present
+
+    - name: Clone repository
+      git:
+        repo: "https://github.com/hcl/app.git"
+        dest: "/opt/hcl-app"
+
+
+### Terraform — RDS Skeleton (MySQL)
+provider "aws"{
+  region = "us-east-1"
+}
+
+resource "aws_db_instance" "hclRDS" {
+  allocated_storage      = 20
+  storage_type           = "gp2"
+  engine                 = "mysql"
+  engine_version         = "8.0"
+  instance_class         = "db.t3.micro"
+  db_name                = "hcldb"
+  username               = "admin"
+  password               = "hcl123"
+  skip_final_snapshot    = true
+}
+
+
+### Kubernetes — Deployment Rolling Update (Detailed)
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hcl-rollout
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 2
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: rollout
+  template:
+    metadata:
+      labels:
+        app: rollout
+    spec:
+      containers:
+        - name: app
+          image: nginx
+          ports:
+            - containerPort: 80
+
+
+### Shell Script — Check Internet Connectivity
+
+#!/bin/bash
+
+ping -c 2 google.com &> /dev/null
+
+if [ $? -eq 0 ]; then
+  echo "Internet is available"
+else
+  echo "No internet connection"
+fi
+
+
+### Jenkins Pipeline — Manual Approval
+
+pipeline {
+    agent any
+    environment {
+        INSTITUTE_NAME = "hcl"
+    }
+    stages {
+        stage('Deploy') {
+            steps {
+                input message: "Approve deployment for $INSTITUTE_NAME?"
+                sh 'echo "Deployment approved and executed!"'
+            }
+        }
+    }
+}
+
+### GitLab CI — Manual Approval Job
+
+stages:
+  - deploy
+
+variables:
+  INSTITUTE_NAME: "hcl"
+
+deploy:
+  stage: deploy
+  image: alpine:latest
+  script:
+    - echo "Ready to deploy $INSTITUTE_NAME"
+  when: manual
