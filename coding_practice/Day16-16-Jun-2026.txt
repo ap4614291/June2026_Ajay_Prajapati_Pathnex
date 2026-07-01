@@ -1,0 +1,218 @@
+### Ansible - Create Role Structure
+
+ansible-project/
+├── inventory
+├── playbook.yml
+└── roles/
+    └── pathnex/
+        ├── tasks/
+        │   └── main.yml
+        ├── handlers/
+        │   └── main.yml
+        ├── templates/
+        |   └── httpd.conf.j2
+        └── vars/
+            └── main.yml
+
+playbook.yml
+---
+- name: Configure web server
+  hosts: webservers
+  become: true
+
+  roles:
+   - pathnex
+
+roles/pathnex/tasks/main.yml
+---
+- name: Install Apache
+  package:
+    name: "{{ package_name }}"
+    state: present
+
+- name: Start Apache
+  service:
+    name: "{{ service_name }}"
+    state: started
+
+- name: Copy Apache conf
+  template:
+    src: httpd.conf.j2
+    dest: /etc/httpd/conf/httpd.conf
+  notify: Restart Apache
+
+roles/pathnex/handlers/main.yml
+---
+- name: Restart Apache
+  service:
+    name: "{{ service_name }}"
+    state: restarted
+
+roles/pathnex/vars/main.yml
+---
+package_name: httpd
+service_name: httpd
+server_name: webserver
+port: 80
+
+roles/pathnex/templates/httpd.conf.j2
+ServerName {{ server_name }}
+Listen {{ port }}
+
+
+### Terraform - DynamoDB Table
+
+provider "aws" {
+  region = "us-east-1"
+}
+
+resource "aws_dynamodb_table" "hcl_ddb" {
+  name = "HCLTable"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key = "ID"
+
+  attribute {
+    name = "ID"
+    type ="S"
+  }
+
+  tags = {
+    Name = "hcl_ddb"
+  }
+}
+
+
+### Kubernetes - Statefulset
+
+# statefulset.yml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: hcl-app-sfs
+  namespace: hcl-ns
+spec:
+  serviceName: "hcl-sfs-svc"
+  replicas: 2
+  selector:
+    matchLabels:
+      app: hcl-sfs-app
+  template:
+    metadata:
+      labels:
+        app: hcl-sfs-app
+    spec:
+      containers:
+      - name: hcl-sfs-app-container
+        image: mysql
+        ports:
+          - containerPort: 3306
+        env:
+          - name: MYSQL_ROOT_PASSWORD
+            value: "Pathnex123"
+        volumeMounts:
+          - name: mysql-storage
+            mountPath: /var/lib/mysql
+  volumeClaimTemplates:
+  - metadata:
+      name: mysql-storage
+    spec:
+      accessModes: [ReadWriteOnce]
+      resources:
+        requests:
+          storage: 1Gi
+
+# sfs-pv.yml
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: hcl-sfs-pv
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  hostPath:
+    path: /mnt/data/mysql
+
+# sfs-svc.yml
+apiVersion: v1
+kind: Service
+metadata:
+  name: sfs-svc
+  namespace: hcl-ns
+spec:
+  clusterIP: None
+  selector: 
+    app: hcl-sfs-app
+  ports:
+  - port: 3306
+    targetPort: 3306
+
+
+### Shell Script - Check Service running
+
+#!/bin/bash
+
+SERVICE="sshd"
+
+if systemctl is-active --quiet $SERVICE; then
+  echo "$SERVICE is running"
+else
+  echo "$SERVICE is not running"
+fi
+
+
+
+### Jenkins Pipeline - Promote Artifacts
+pipeline {
+
+  agent {
+    label 'worker-1'
+  }
+
+  environment {
+    INSTITUTE_NAME = "Pathnex"
+  }
+
+  stages{
+    stage('Build') {
+      steps{
+          git branch: main, url: 'https://github.com/Pathnex/sample-java-app.git'
+          sh 'mvn clean package'
+      }
+    }
+
+    stage('Promote'){
+      steps{
+        input message: "Promote artifcats to staging?"
+        sh 'echo "Promoting artifacts for $INSTITUTE_NAME"'
+      }
+    }
+  }
+}
+
+
+### GitLab CI - Artifacts Promotion
+
+stages:
+ - build
+ - Promote
+
+build:
+  stage: build
+  image: maven:3.8.1-jdk-21
+  script:
+    - git clone https://github.com/Pathnex/sample-java-app.git
+    - mvn clean package
+  artifacts:
+    paths:
+      - target/*.jar
+    expire_in: 1 week
+
+promote:
+  stage: promote
+  image: alpine:latest
+  script:
+    - echo "Promoting artifacts for Pathnex"
+  when: manual
