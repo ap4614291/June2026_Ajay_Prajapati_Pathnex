@@ -1,0 +1,320 @@
+### Ansible - Install Nginx, start and enable service, deploy hhtml page
+
+--- 
+- name: Install Nginx, deploy html page, start and enable service
+  hosts: webserver
+  become: true
+
+  tasks:
+    - name: Install Nginx
+      package:
+        name: nginx
+        state: present
+
+    - name: Deploy html page
+      copy:
+        src: /home/ec2-user/index.html
+        dest: /usr/share/nginx/html/index.html
+      notify: Restart service
+    
+    - name: Enable & start service
+      service:
+        name: nginx
+        enabled: true
+        state: started
+
+  handlers:
+    - name: Restart service
+      service:
+        name: nginx
+        state: restarted
+
+
+
+### Terraform - Create EC2, Security Group, Key Pair, EBS Volume, Output IP
+
+provider "aws" {
+  region = "us-east-1"
+}
+
+resource "aws_security_group" "hcl_sg"{
+
+  name = "hcl_sg"
+  vpc_id = aws_vpc.hcl_vpc.id
+
+  ingress{
+    from_port = 22
+    to_port = 22
+    protocol = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress{
+    from_port = 0
+    to_port = 0
+    protocol = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_key_pair" "hcl_key"{
+  key_name = "hcl_key"
+  public_key = file("~/.ssh/id_rsa.pub")
+}
+
+resource "aws_instance" "hcl_ec2"{
+  ami = "ami-12345"
+  instance_type = "c6i.8xlarge"
+  vpc_security_group_ids = [aws_security_group.hcl_sg.id]
+  key_name = aws_key_pair.hcl_key.key_name
+
+  tags = {
+    Name = "hcl_ec2"
+  }
+}
+
+resource "aws_ebs_volume" "hcl_ebs" {
+  availability_zone = "us-east-1a"
+  size = 10
+  type = "gp3"
+}
+
+resource "aws_volume_attachment" "hcl_ebs_ec2" {
+  device_name = "/dev/sdh"
+  volume_id = aws_ebs_volume.hcl_ebs.id
+  instance_id = aws_instance.hcl_ec2.id
+}
+
+output "instance_public_ip"{
+  value = aws_instance.hcl_ec2.public_ip
+}
+
+
+
+### Kubernetes - Create deployment using PVC, expose via nodeport
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: hcl-nodeport-svc
+spec:
+  selector:
+    app: hcl-dep-app
+  type: NodePort
+  ports:
+    - port: 80
+      targetPort: 80
+      nodePort: 20080
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hcl-dep
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: hcl-dep-app
+  template:
+    metadata:
+      labels:
+        app: hcl-dep-app
+    spec:
+      containers:
+        - name: hcl-dep-app-cont
+          image: nginx:latest
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "200Mi"
+            limits:
+              cpu: "200m"
+              memory: "500Mi"
+          volumeMounts:
+            - name: hcl-dep-app-volume
+              mountPath: /usr/share/nginx/html
+
+      volumes:
+        - name: hcl-dep-app-volume
+          persistentVolumeClaim: 
+            claimName: hcl-pvc
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: hcl-pv
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  hostPath:
+    path: /data/hcl
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: hcl-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 500Mi
+
+
+
+### Shell Script - Print CPU, Memory, Disk, IP and Top process.
+
+#!/bin/bash
+
+printf "\n --------- System Health Checks --------- \n"
+
+#CPU Usage
+printf "\nCPU Usage: \n"
+top -bn1 | grep "Cpu(s)" | aws '{print "CPU Load" $2 + $4 "%"}'
+
+# Memory Usage
+printf "\nMemory Usage: \n"
+free -h | awk 'NR==2 {print "Total: " $2 " / Used: " $3}'
+
+# Disk Usage
+printf "\nDisk Usage: \n"
+df -h / | aws 'NR==2{print "Total: " $2 " | Used: " $3 " | Available: " $4 " | Usage: " $5}'
+
+# IP Address
+printf "\nIP Address: \n"
+hostname -I | awk '{print $1}'
+
+# Top Process by CPU
+printf "\nTop Process By CPU: \n"
+ps aux --sort=-%cpu | awk 'NR==2{print "PID: " $2 " | CPU: " $3 "% | Command: " $11}'
+
+
+
+### Jenkins Pipeline 
+
+pipeline {
+  agent {
+    label 'worker-1'
+  }
+
+  environment {
+    INSTITUTE_NAME = "Pathnex"
+    TEAM = "DevOps"
+    ENV = "prod"
+    PROJECT = "Pathnex-Training"
+  }
+
+  stages{
+    stage('IaC using Terraform'){
+      steps{
+        sh '''
+          printf "\nBuilding Infrastructure of $INSTITUTE_NAME for $PROJECT\n"
+
+          cd terraform/
+
+          terraform init
+          terraform fmt
+          terraform validate
+          terraform plan
+          terraform apply -auto-approve
+        '''
+      }
+    }
+    stage('Configure EC2 using Ansible'){
+      steps{
+        sh '''
+          printf '\n Deploying application using Ansible\n'
+          cd ansible/
+          ansible-playbook -i inventory.ini playbook.yaml
+        '''
+      }
+    }
+    stage('Kubernetes Deployment'){
+      steps{
+        sh '''
+          printf "\nDeploying app in Kubernetes\n"
+
+          kubectl apply -f kubernetes/
+          kubectl get pods
+          kubectl get svc
+        '''
+      }
+    }
+    stage('Monitor EC2'){
+      steps{
+        sh '''
+          printf 'Running shell script to view health check'
+
+          chmod +x scripts/monitor.sh
+          ./scripts/monitor.sh
+        '''
+      }
+    }
+  }
+}
+
+
+### GitLab
+
+stages:
+  - infrastructure
+  - app_deployment
+  - monitoring_checks 
+
+variables:
+  INSTITUTE_NAME: "Pathnex"
+  TEAM: "DevOps"
+  ENV: "prod"
+  PROJECT: "Pathnex-Training"
+
+infrastructure:
+  stage: infrastructure
+  image: hashicorp/terraform:latest
+  script:
+    - echo "Institute: $INSTITUTE_NAME"
+    - echo "Team: $TEAM"
+    - echo "Environment: $ENV"
+    - echo "Project: $PROJECT"
+    - cd terraform/ 
+    - terraform init
+    - terraform fmt
+    - terraform validate
+    - terraform plan 
+    - terraform apply -auto-approve
+  only:
+    - main
+
+app_deployment:
+  stage: app_deployment
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache ansible kubectl
+  script:
+    - cd ansible
+    - ansible-playbook -i inventory.ini playbook.yaml
+    - cd ../kubernetes
+    - kubectl apply -f .
+    - kubectl get pods
+    - kubectl get svc
+  only:
+   - main
+
+monitoring_checks:
+  stage: monitoring_checks
+  image: alpine:latest
+  before_script:
+   - apk add --no-cache procps util-linux
+  script:
+    - cd scripts
+    - chmod +x monitor.sh
+    - ./monitor.sh
+  only:
+   - main
