@@ -1,0 +1,264 @@
+### Ansible - create user "pathnex-admin", add ssh key and set shell BASH.
+---
+- name: Create user and add ssh key
+  hosts: all
+  become: true
+
+  tasks:
+    - name: Create user and provide shell BASH
+      user:
+        name: pathnex-admin
+        shell: /bin/bash
+        create_home: true
+        state: present
+    
+    - name: Add public ssh key
+      authorized_key:
+        user: pathnex-admin
+        key: "{{ lookup('file', '~/.ssh/pathnex-admin.pub') }}"
+        state: present
+  
+
+### Terraform - create EC2 with tag Project = "Pathnex-Training"
+
+provider "aws" {
+  region = "us-east-1"
+}
+
+resource "aws_key_pair" "pathnex-key"{
+  key_name = "pathnex-admin"
+  public_key = file("~/.ssh/pathnex-admin.pub") 
+}
+
+resource "aws_instance" "pathnex-ec2" {
+
+  ami = "ami-12345"
+  instance_type = "c8x.large"
+  key_name = aws_key_pair.pathnex-key.key_name
+  vpc_security_group_ids = [aws_security_group.pathnex_sg.id]
+
+  tags = {
+    Project = "Pathnex-Training"
+  }
+}
+
+### Kubernetes - Deployment (2 replicas) and expose via clusterIP
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: pathnex-svc
+  namespace: pathnex-ns
+spec:
+  type: ClusterIP
+  selector:
+    app: pathnex-app
+  ports:
+    - port: 81
+      targetPort: 80
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pathnex-dep
+  namespace: pathnex-ns
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: pathnex-app
+  template:
+    metadata:
+      labels:
+        app: pathnex-app
+    spec:
+      containers:
+        - name: pathnex-app-con
+          image: nginx
+          ports:
+            - containerPort: 80
+    
+
+### Shell Script - Create menu with IP, Disk and Memory
+
+#!/bin/bash
+
+while true;
+do
+  clear
+  echo "1. Show IP Address"
+  echo "2. Show Disk Usage"
+  echo "3. Show Memory Usage"
+  echo "4. Exit"
+
+  read -p "Enter your choice: " CHOICE
+
+  case $CHOICE in 
+    1) 
+      printf "\n IP Address: $(hostname -I)\n"
+      ;;
+    2)
+      printf "\nDisk Usage:\n"
+      df -h
+      ;;
+    3)
+      printf "\nMemory Usage:\n"
+      free -h
+      ;;
+    4) 
+      exit 0
+      ;;
+    *)
+      printf "\nInvalid Choice\n"
+      ;;
+  esac
+done
+
+
+## Jenkins Pipeline - Automate the above 4 stuffs
+
+pipeline {
+
+  agent {
+    label 'worker-1'
+  }
+
+  environment {
+    INSTITUTE_NAME = "Pathnex"
+    TEAM = "DevOps"
+    ENV = "prod"
+    PROJECT = "Pathnex-Training"
+  }
+
+  stages{
+
+    stage('Creating Infrastructure EC2 using Terraform'){
+      steps{
+        sh '''
+          printf "Creating EC2 for $INSTITUTE_NAME with team name $TEAM and project $PROJECT in $ENV environment"
+          
+          cd Terraform/
+          terraform init
+          terraform fmt
+          terraform validate
+          terraform plan
+          terraform apply -auto-approve
+
+          PUBLIC_IP=$(terraform output -raw public_ip)
+
+          cat<<EOF > ../Ansible/inventory.ini
+[webservers]
+${PUBLIC_IP}
+
+[all:vars]
+env=$ENV
+project=$PROJECT
+EOF
+
+          echo "EC2 created successfully and added public in inventory.ini"        
+        '''
+      }
+    }
+
+    stage('Configure EC2 using Ansible'){
+      steps{
+        withCredentials([sshUserPrivateKey(credentialsId: 'ec2-ssh-key', keyFileVariable: 'SSH_KEY_PATH')]){
+          sh '''
+            cd Ansible/
+            ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i inventory.ini playbook.yml --private-key=$SSH_KEY_PATH
+
+          '''
+
+          ### we will storing the ssh-private-key in jenkins itself with name ec2-ssh-key and SSH_KEY_PATH is temp location where private key stored.
+        }
+      }
+    }
+
+    stage('Deploy the Nginx on Kubernetes'){
+      steps{
+        sh '''
+          cd kubernetes/
+          kubectl apply -f pathnex-svc.yml -f pathnex-dep.yml
+        '''
+      }
+    }
+
+    stage('Monitor EC2'){
+      steps{
+        sh '''
+          cd Scripts
+          chmod +x monitor.sh
+          ./monitor.sh 
+        '''
+      }
+    }
+
+  }
+}
+
+
+### GitLab - Automate all 4 stuffs
+
+stages:
+  - infrastructure 
+  - app_deployment
+  - monitoring_checks 
+
+variables:
+  INSTITUTE_NAME: "Pathnex"
+  TEAM: "DevOps"
+  ENV: "prod"
+  PROJECT: "Pathnex-Training"
+
+infrastructure:
+  stage: infrastructure
+  image: hashicorp/terraform:latest
+  script:
+    - printf "Creating EC2 for $INSTITUTE_NAME with team name $TEAM and project $PROJECT in $ENV environment"
+    - cd Terraform/
+    - terraform init
+    - terraform fmt
+    - terraform validate
+    - terraform plan
+    - terraform apply -auto-approve
+    - PUBLIC_IP=$(terraform output -raw public_ip)
+    - |
+      cat<<EOF > ../Ansible/inventory.ini
+      [webservers]
+      ${PUBLIC_IP}
+
+      [all:vars]
+      env=$ENV
+      project=$PROJECT
+      EOF
+    - echo "EC2 created successfully and added public in inventory.ini" 
+  only:
+    - main
+
+app_deployment:
+  stage: app_deployment
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache ansible kubectl
+  script:
+    - cd Ansible/
+    - ansible-playbook -i inventory.ini playbook.yaml
+    - cd ../kubernetes
+    - kubectl apply -f .
+    - kubectl get pods
+    - kubectl get svc
+  only:
+   - main
+
+monitoring_checks:
+  stage: monitoring_checks
+  image: alpine:latest
+  before_script:
+   - apk add --no-cache procps util-linux
+  script:
+    - cd scripts
+    - chmod +x monitor.sh
+    - ./monitor.sh
+  only:
+   - main
